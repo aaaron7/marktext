@@ -15,8 +15,18 @@ Usage: marktext [commands] [path ...]
     -h, --help                    Print this help message
 ```
 
-`marktext` should point to your installation of MarkText. The exact location will vary from platform to platform. On macOS, you can create a convenient alias like:
+`marktext` should point to your installation of MarkText. The exact location will vary from platform to platform. On macOS, `./build.sh` now installs a `mark` launcher automatically after a successful build and app copy, so you can run:
 
 ```sh
-alias marktext="/Applications/Mark\ Text.app/Contents/MacOS/Mark\ Text"
+mark .
+mark README.md
+mark docs
+```
+
+If you want a custom location, set `MARKTEXT_CLI_PATH=/your/path/mark` before running `./build.sh`.
+
+You can also create a manual alias like:
+
+```sh
+alias marktext="/Applications/MarkText.app/Contents/MacOS/MarkText"
 ```

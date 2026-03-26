@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn install)",
+      "Bash(npm *)",
+      "Bash(yarn *)",
+      "Bash(node *)",
+      "Bash(yarn install *)",
+      "Bash(yarn run *)",
+      "Bash(pip3 install *)"
+    ]
+  }
+}

@@ -29,6 +29,8 @@ export const IMAGE_EXTENSIONS = Object.freeze([
   'webp'
 ])
 
+const PROJECT_TREE_IGNORED_PATH_RE = /(?:^|[/\\])(?:node_modules|[^/\\]+\.asar)(?:[/\\]|$)/
+
 /**
  * Returns true if the filename matches one of the markdown extensions.
  *
@@ -37,6 +39,33 @@ export const IMAGE_EXTENSIONS = Object.freeze([
 export const hasMarkdownExtension = filename => {
   if (!filename || typeof filename !== 'string') return false
   return MARKDOWN_EXTENSIONS.some(ext => filename.toLowerCase().endsWith(`.${ext}`))
+}
+
+/**
+ * Returns true when a path should be skipped by the project tree watcher.
+ *
+ * Dot-prefixed files and directories are intentionally allowed so they appear
+ * after opening a folder. We only exclude heavy/system paths and non-markdown
+ * files from the tree.
+ *
+ * @param {string} pathname The full path.
+ * @param {{ isDirectory: Function }} [fileInfo] Optional file info from chokidar.
+ */
+export const isProjectTreePathIgnored = (pathname, fileInfo) => {
+  if (!pathname || PROJECT_TREE_IGNORED_PATH_RE.test(pathname)) {
+    return true
+  }
+
+  // Chokidar calls the matcher once before stat information is available.
+  if (!fileInfo) {
+    return false
+  }
+
+  if (fileInfo.isDirectory()) {
+    return false
+  }
+
+  return !hasMarkdownExtension(pathname)
 }
 
 /**

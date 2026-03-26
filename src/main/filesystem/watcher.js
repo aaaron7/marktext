@@ -3,7 +3,7 @@ import fsPromises from 'fs/promises'
 import log from 'electron-log'
 import chokidar from 'chokidar'
 import { exists } from 'common/filesystem'
-import { hasMarkdownExtension } from 'common/filesystem/paths'
+import { hasMarkdownExtension, isProjectTreePathIgnored } from 'common/filesystem/paths'
 import { getUniqueId } from '../utils'
 import { loadMarkdownFile } from '../filesystem/markdown'
 import { isLinux, isOsx } from '../config'
@@ -149,21 +149,7 @@ class Watcher {
 
     const id = getUniqueId()
     const watcher = chokidar.watch(watchPath, {
-      ignored: (pathname, fileInfo) => {
-        // This function is called twice, once with a single argument (the path),
-        // second time with two arguments (the path and the "fs.Stats" object of that path).
-        if (!fileInfo) {
-          return /(?:^|[/\\])(?:\..|node_modules|(?:.+\.asar))/.test(pathname)
-        }
-
-        if (/(?:^|[/\\])(?:\..|node_modules|(?:.+\.asar))/.test(pathname)) {
-          return true
-        }
-        if (fileInfo.isDirectory()) {
-          return false
-        }
-        return !hasMarkdownExtension(pathname)
-      },
+      ignored: (pathname, fileInfo) => isProjectTreePathIgnored(pathname, fileInfo),
       ignoreInitial: type === 'file',
       persistent: true,
       ignorePermissionErrors: true,

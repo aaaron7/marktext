@@ -1,6 +1,6 @@
 import path from 'path'
 import fsPromises from 'fs/promises'
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import dayjs from 'dayjs'
 import log from 'electron-log'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron'
@@ -18,6 +18,9 @@ import { WindowType } from '../windows/base'
 import EditorWindow from '../windows/editor'
 import SettingWindow from '../windows/setting'
 
+const MARKDOWN_EDITOR_BUNDLE_ID = 'com.github.marktext.marktext'
+const MARKDOWN_EDITOR_PROMPT_DELAY_MS = 1500
+
 class App {
   /**
    * @param {Accessor} accessor The application accessor for application instances.
@@ -28,6 +31,7 @@ class App {
     this._args = args || { _: [] }
     this._openFilesCache = []
     this._openFilesTimer = null
+    this._didCheckDefaultMarkdownEditor = false
     this._windowManager = this._accessor.windowManager
     // this.launchScreenshotWin = null // The window which call the screenshot.
     // this.shortcutCapture = null
@@ -200,6 +204,8 @@ class App {
     } else {
       this._createEditorWindow()
     }
+
+    this._scheduleDefaultMarkdownEditorCheck()
 
     // this.shortcutCapture = new ShortcutCapture()
     // if (process.env.NODE_ENV === 'development') {
@@ -419,6 +425,86 @@ class App {
       return
     }
     this._createSettingWindow(category)
+  }
+
+  _scheduleDefaultMarkdownEditorCheck () {
+    if (this._didCheckDefaultMarkdownEditor || !isOsx || !app.isPackaged) {
+      return
+    }
+
+    this._didCheckDefaultMarkdownEditor = true
+    setTimeout(() => {
+      this._checkDefaultMarkdownEditor().catch(err => {
+        log.error('Failed to check default Markdown editor.', err)
+      })
+    }, MARKDOWN_EDITOR_PROMPT_DELAY_MS)
+  }
+
+  async _checkDefaultMarkdownEditor () {
+    const defaultApp = await this._getDefaultMarkdownEditor()
+    if (!defaultApp || defaultApp.bundleId === MARKDOWN_EDITOR_BUNDLE_ID) {
+      return
+    }
+
+    const currentAppBundlePath = this._getCurrentAppBundlePath()
+    const currentWindow = BrowserWindow.getAllWindows().find(win => !win.isDestroyed())
+    const defaultAppName = defaultApp.name || defaultApp.bundleId
+    const messageBoxOptions = {
+      type: 'info',
+      buttons: ['Reveal MarkText', 'Later'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      message: 'MarkText is not the default editor for Markdown files.',
+      detail: `Current default app: ${defaultAppName}\n\nTo change this on macOS, right-click any .md file, choose "Get Info", set "Open with" to MarkText, then click "Change All...".`
+    }
+    const messageBoxPromise = currentWindow
+      ? dialog.showMessageBox(currentWindow, messageBoxOptions)
+      : dialog.showMessageBox(messageBoxOptions)
+    const { response } = await messageBoxPromise
+
+    if (response === 0 && currentAppBundlePath) {
+      shell.showItemInFolder(currentAppBundlePath)
+    }
+  }
+
+  _getCurrentAppBundlePath () {
+    const executablePath = app.getPath('exe')
+    return path.normalize(path.resolve(executablePath, '../../..'))
+  }
+
+  async _getDefaultMarkdownEditor () {
+    const tempFilePath = path.join(app.getPath('temp'), `marktext-default-editor-${process.pid}.md`)
+    await fsPromises.writeFile(tempFilePath, '')
+
+    try {
+      const output = await new Promise((resolve, reject) => {
+        execFile('osascript', [
+          '-e', `set targetFile to POSIX file "${tempFilePath.replace(/"/g, '\\"')}"`,
+          '-e', 'set defaultAppPath to POSIX path of (default application of (info for targetFile))',
+          '-e', 'set defaultAppId to id of application defaultAppPath',
+          '-e', 'return defaultAppId & linefeed & defaultAppPath'
+        ], {
+          timeout: 5000
+        }, (error, stdout) => {
+          if (error) {
+            reject(error)
+            return
+          }
+          resolve(stdout.trim())
+        })
+      })
+
+      const [bundleId = '', appPath = ''] = output.split(/\r?\n/)
+      const trimmedAppPath = appPath.trim().replace(/\/$/, '')
+      return {
+        bundleId: bundleId.trim(),
+        path: trimmedAppPath,
+        name: path.basename(trimmedAppPath, '.app')
+      }
+    } finally {
+      await fsPromises.unlink(tempFilePath).catch(() => {})
+    }
   }
 
   _listenForIpcMain () {
